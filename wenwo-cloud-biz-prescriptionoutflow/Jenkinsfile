@@ -1,0 +1,68 @@
+pipeline {
+    agent any
+    stages {
+        stage("编译打包") {
+                   steps {
+                       script {
+                            sh "curl -i -X POST -H \"'Content-type':'application/json'\" -d \'{\"buildid\":\"${env.BUILD_ID}\",\"jenkinsjobname\":\"${env.JOB_NAME}\",\"buildurl\":\"${env.BUILD_URL}\",\"branchname\":\"${env.GIT_BRANCH}\",\"images\":\"\",\"status\":\"构建中\",\"steps\":\"start\"}\' http://10.200.0.128:80/project/jenkins/buildInfo"
+                            sh '/data/maven/bin/mvn -B -U clean package -Dfile.encoding=UTF-8 -Dmaven.test.skip=true'
+                       }
+                   }
+               }
+
+        stage("代码扫描"){
+                    steps {
+                        dir(env.WORKSPACE){
+                            sh "/data/maven/bin/mvn sonar:sonar -Dsonar.host.url=http://10.200.0.144:9000 -Dsonar.login=1c0bc447ba1ebf80d0dd49e95fd081faaea71611"    //指定sonar的ip和token
+                        }
+                    }
+                }
+
+        stage("质量检测"){
+            steps {
+                script{
+                    sh 'sleep 10'
+                    def projectName = env.JOB_NAME
+                    def status = sh label: "", returnStdout: true, script: "curl http://10.200.0.128:80/public/sonarqube/status?projectName=${projectName}"
+                    echo status
+                    if (status != '\"OK\"') {
+                        sh 'exit 1'
+                    }
+                }
+            }
+        }
+
+        stage("上传镜像") {
+            steps {
+                script {
+                    def projectBranch = env.GIT_BRANCH.split("/")[1]
+                    def projectName = env.JOB_NAME
+                    def pom = readMavenPom file: 'pom.xml'
+                    def version = pom.version
+                    def contentRegex = "/.{0,10}/"
+                    def commit = "${env.GIT_COMMIT}"
+                    def commitSha1_10 = sh label: "", returnStdout: true, script: "expr substr '${commit}' 1 10"
+                    commitSha1_10=commitSha1_10.replaceAll("\n","")
+                    sh "docker tag java/${projectName}:${version} 10.200.0.143:80/wenwo/${projectName}:${version}-${projectBranch}-${env.BUILD_ID}-${commitSha1_10}"
+                    sh "docker push 10.200.0.143:80/wenwo/${projectName}:${version}-${projectBranch}-${env.BUILD_ID}-${commitSha1_10}"
+                    sh "docker rmi java/${projectName}:${version} java/${projectName}:latest 10.200.0.143:80/wenwo/${projectName}:${version}-${projectBranch}-${env.BUILD_ID}-${commitSha1_10}"
+                    sh "curl -i -X POST -H \"'Content-type':'application/json'\" -d \'{\"buildid\":\"${env.BUILD_ID}\",\"jenkinsjobname\":\"${env.JOB_NAME}\",\"buildurl\":\"${env.BUILD_URL}\",\"branchname\":\"${env.GIT_BRANCH}\",\"images\":\"10.200.0.143:80/wenwo/${projectName}:${version}-${projectBranch}-${env.BUILD_ID}-${commitSha1_10}\",\"status\":\"构建成功\",\"steps\":\"end\"}\' http://10.200.0.128:80/project/jenkins/buildInfo"
+
+                }
+            }
+        }
+
+        stage("清理空间") {
+            steps {
+                sh "ls -al"
+                deleteDir()
+                sh "ls -al"
+            }
+        }
+    }
+     post {
+            failure {
+                sh "curl -i -X POST -H \"'Content-type':'application/json'\" -d \'{\"buildid\":\"${env.BUILD_ID}\",\"jenkinsjobname\":\"${env.JOB_NAME}\",\"buildurl\":\"${env.BUILD_URL}\",\"branchname\":\"${env.GIT_BRANCH}\",\"images\":\"\",\"status\":\"构建失败\",\"steps\":\"end\"}\' http://10.200.0.128:80/project/jenkins/buildInfo"
+            }
+        }
+}

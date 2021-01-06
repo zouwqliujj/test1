@@ -1,0 +1,139 @@
+<configuration>
+    <logger name="io.swagger" level="ERROR" />
+	<property resource="bootstrap.yml" />
+	<springProperty scope="context" name="appName" source="spring.application.name" />
+	<springProperty scope="context" name="env" source="spring.profiles.active" />
+	<springProperty scope="context" name="endpoint" source="endpoint" />
+	<springProperty scope="context" name="accessKeyId" source="accessKeyId" />
+	<springProperty scope="context" name="accessKeySecret" source="accessKeySecret" />
+	<springProperty scope="context" name="project" source="project" />
+	<springProperty scope="context" name="logStore" source="logStore" />
+	<springProperty scope="context" name="ip" source="eureka.instance.ip-address" />
+
+	<property name="LOG_HOME" value="/data/logs/${appName}" />
+	<property name="ENCODER_PATTERN" value="[${appName}][${ip}][%d{yyyy-MM-dd HH:mm:ss}][%-5level][%tid][%thread][%M][%c.%F,%L]==>%msg%n" />
+	<property name="ENCODER_PATTERN_ERROR" value="[${appName}][${ip}][%d{yyyy-MM-dd HH:mm:ss}][%-5level][%tid][%thread][%logger{80}.%M][%F.%L]-->%msg%n" />
+
+	<!--为了防止进程退出时，内存中的数据丢失，请加上此选项-->
+	<shutdownHook class="ch.qos.logback.core.hook.DelayingShutdownHook"/>
+	<!-- 阿里云 loghubAppender	-->
+	<appender name="loghubAppender" class="com.aliyun.openservices.log.logback.LoghubAppender">
+		<!--必选项-->
+		<!-- 账号及网络配置 -->
+		<endpoint>${endpoint}</endpoint>
+		<accessKeyId>${accessKeyId}</accessKeyId>
+		<accessKeySecret>${accessKeySecret}</accessKeySecret>
+		<!-- sls 项目配置 -->
+		<project>${project}</project>
+		<logStore>${appName}</logStore>
+		<!--必选项 (end)-->
+
+		<!-- 可选项 -->
+		<topic>${appName}</topic>
+		<source>${ip}</source>
+
+		<!-- 可选项 详见 '参数说明'-->
+		<totalSizeInBytes>104857600</totalSizeInBytes>
+		<maxBlockMs>60000</maxBlockMs>
+		<ioThreadCount>8</ioThreadCount>
+		<batchSizeThresholdInBytes>524288</batchSizeThresholdInBytes>
+		<batchCountThreshold>4096</batchCountThreshold>
+		<lingerMs>2000</lingerMs>
+		<retries>10</retries>
+		<baseRetryBackoffMs>100</baseRetryBackoffMs>
+		<maxRetryBackoffMs>100</maxRetryBackoffMs>
+
+		<encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+			<layout class="org.apache.skywalking.apm.toolkit.log.logback.v1.x.TraceIdPatternLogbackLayout">
+				<pattern>${ENCODER_PATTERN_ERROR}</pattern>
+			</layout>
+		</encoder>
+
+		<filter class="ch.qos.logback.classic.filter.ThresholdFilter"><!-- 打印WARN,ERROR级别的日志 -->
+			<level>INFO</level>
+		</filter>
+
+		<mdcFields>THREAD_ID,MDC_KEY</mdcFields>
+	</appender>
+
+	<!-- 控制台日志：输出全部日志到控制台 -->
+	<appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+		<encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+			<layout class="org.apache.skywalking.apm.toolkit.log.logback.v1.x.TraceIdPatternLogbackLayout">
+				<pattern>${ENCODER_PATTERN_ERROR}</pattern>
+			</layout>
+		</encoder>
+		<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+			<level>INFO</level>
+		</filter>
+	</appender>
+
+	<!-- 文件日志：输出全部日志到文件 -->
+	<appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<fileNamePattern>${LOG_HOME}/output.%d{yyyy-MM-dd}.log</fileNamePattern>
+			<maxHistory>30</maxHistory>
+		</rollingPolicy>
+		<encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+			<layout class="org.apache.skywalking.apm.toolkit.log.logback.v1.x.TraceIdPatternLogbackLayout">
+				<pattern>${ENCODER_PATTERN_ERROR}</pattern>
+			</layout>
+		</encoder>
+		<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+			<level>INFO</level>
+		</filter>
+	</appender>
+
+	<appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<fileNamePattern>${LOG_HOME}/error.%d{yyyy-MM-dd}.log</fileNamePattern>
+			<maxHistory>30</maxHistory>
+		</rollingPolicy>
+		<encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+			<layout class="org.apache.skywalking.apm.toolkit.log.logback.v1.x.TraceIdPatternLogbackLayout">
+				<pattern>${ENCODER_PATTERN_ERROR}</pattern>
+			</layout>
+		</encoder>
+		<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+			<level>ERROR</level>
+		</filter>
+	</appender>
+
+	<!-- 可用来获取StatusManager中的状态 -->
+	<statusListener class="ch.qos.logback.core.status.OnConsoleStatusListener"/>
+
+	<!-- 解决debug模式下循环发送的问题 -->
+	<logger name="org.apache.http.impl.conn.Wire" level="WARN" />
+
+	<!--开发:打印控制台-->
+	<springProfile name="dev">
+		<root>
+			<level value="INFO" />
+			<appender-ref ref="STDOUT"/>
+			<appender-ref ref="FILE" />
+			<appender-ref ref="ERROR_FILE" />
+		</root>
+	</springProfile>
+
+	<!--测试环境,生产环境:仅仅输出到文件-->
+	<springProfile name="test">
+		<root>
+			<level value="INFO" />
+			<appender-ref ref="STDOUT"/>
+			<appender-ref ref="FILE" />
+			<appender-ref ref="ERROR_FILE" />
+			<appender-ref ref="loghubAppender"/>
+		</root>
+	</springProfile>
+
+	<!--生产环境:输出到阿里云logService-->
+	<springProfile name="prd">
+		<logger name="com.netflix.discovery.DiscoveryClient" level="WARN" />
+		<root>
+			<level value="INFO" />
+			<appender-ref ref="FILE" />
+			<appender-ref ref="ERROR_FILE" />
+			<appender-ref ref="loghubAppender"/>
+		</root>
+	</springProfile>
+</configuration>

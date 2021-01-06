@@ -1,0 +1,59 @@
+app.id: ${spring.application.name}
+apollo:
+  meta: http://10.200.0.3:28080
+  bootstrap:
+    namespaces: application,BASIC-DEP.logback,BASIC-DEP.redis,
+    enabled: true
+    eagerLoad:
+      enabled: true
+server:
+  port: 53020
+spring:
+  application:
+    name: wenwo-cloud-biz-prescriptionoutflow
+  profiles:
+    active: dev
+  cloud:
+    bus:
+      trace:
+        enabled: true
+common:
+  auth:
+    role: admin
+    exclude-path:
+      - /biz/**
+
+---
+spring:
+  profiles: dev
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 20
+  client:
+    serviceUrl:
+      defaultZone: http://10.200.0.3:7001/eureka
+    registry-fetch-interval-seconds: 10
+---
+spring:
+  profiles: test
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 20
+  client:
+    serviceUrl:
+      defaultZone: http://10.200.0.4:7001/eureka
+    registry-fetch-interval-seconds: 10
+---
+spring:
+  profiles: prd
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 20
+  client:
+    registry-fetch-interval-seconds: 10
